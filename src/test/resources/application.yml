@@ -1,0 +1,69 @@
+server:
+  port: 0
+
+security:
+  jwt:
+    secret-key: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    expiration: 3600000
+    issuer: logitrack-security
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+spring:
+  cloud:
+    discovery:
+      enabled: false
+    gateway:
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowed-headers:
+              - Authorization
+              - Content-Type
+              - Accept
+            allow-credentials: true
+            allowCredentials: true
+            max-age: 3600
+      server:
+        webflux:
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns: "*"
+                allowed-methods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - PATCH
+                  - OPTIONS
+                allowed-headers:
+                  - Authorization
+                  - Content-Type
+                  - Accept
+                allow-credentials: true
+                allowCredentials: true
+                max-age: 3600
+      routes:
+        - id: test-envios
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/v1/envios/**
+        - id: test-repartidores
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/v1/repartidores/**
