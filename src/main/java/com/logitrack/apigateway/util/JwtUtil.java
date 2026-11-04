@@ -40,7 +40,20 @@ public class JwtUtil {
             Claims claims = extractAllClaims(token);
             Object rolesObj = claims.get("roles");
             if (rolesObj instanceof List<?>) {
-                return (List<String>) rolesObj;
+                return ((List<?>) rolesObj).stream()
+                        .map(Object::toString)
+                        .toList();
+            } else if (rolesObj instanceof String roleStr) {
+                return List.of(roleStr.split(","));
+            }
+
+            // Fallback por si viniera bajo claim singular 'rol' o 'role'
+            Object singleRole = claims.get("rol");
+            if (singleRole == null) {
+                singleRole = claims.get("role");
+            }
+            if (singleRole != null) {
+                return List.of(singleRole.toString());
             }
         } catch (Exception ignored) {
         }
