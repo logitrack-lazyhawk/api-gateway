@@ -35,7 +35,7 @@ public class JwtUtil {
     @Value("${security.jwt.secret-key:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}")
     private String secretKey;
 
-    @Value("${security.jwt.jwk-set-uri:http://localhost:8080/realms/lazyhawk/protocol/openid-connect/certs}")
+    @Value("${security.jwt.jwk-set-uri:http://localhost:8082/realms/lazyhawk/protocol/openid-connect/certs}")
     private String jwkSetUri;
 
     private final Map<String, PublicKey> keyCache = new ConcurrentHashMap<>();
