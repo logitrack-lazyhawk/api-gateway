@@ -35,7 +35,7 @@ public class JwtUtil {
     @Value("${security.jwt.secret-key:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}")
     private String secretKey;
 
-    @Value("${security.jwt.jwk-set-uri:http://localhost:8080/realms/lazyhawk/protocol/openid-connect/certs}")
+    @Value("${security.jwt.jwk-set-uri:http://localhost:8082/realms/lazyhawk/protocol/openid-connect/certs}")
     private String jwkSetUri;
 
     private final Map<String, PublicKey> keyCache = new ConcurrentHashMap<>();
@@ -158,28 +158,39 @@ public class JwtUtil {
     }
 
     private synchronized void fetchJwkKeys() {
-        if (jwkSetUri == null || jwkSetUri.isBlank()) {
-            return;
+        List<String> urisToTry = new ArrayList<>();
+        if (jwkSetUri != null && !jwkSetUri.isBlank()) {
+            urisToTry.add(jwkSetUri);
         }
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(jwkSetUri))
-                    .timeout(Duration.ofSeconds(2))
-                    .GET()
-                    .build();
+        if (!urisToTry.contains("http://keycloak:8080/realms/lazyhawk/protocol/openid-connect/certs")) {
+            urisToTry.add("http://keycloak:8080/realms/lazyhawk/protocol/openid-connect/certs");
+        }
+        if (!urisToTry.contains("http://localhost:8082/realms/lazyhawk/protocol/openid-connect/certs")) {
+            urisToTry.add("http://localhost:8082/realms/lazyhawk/protocol/openid-connect/certs");
+        }
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                JwkSet jwkSet = Jwks.setParser().build().parse(response.body());
-                for (Jwk<?> jwk : jwkSet.getKeys()) {
-                    if (jwk.getId() != null && jwk.toKey() instanceof PublicKey pk) {
-                        keyCache.put(jwk.getId(), pk);
+        for (String uri : urisToTry) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(uri))
+                        .timeout(Duration.ofSeconds(2))
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 200) {
+                    JwkSet jwkSet = Jwks.setParser().build().parse(response.body());
+                    for (Jwk<?> jwk : jwkSet.getKeys()) {
+                        if (jwk.getId() != null && jwk.toKey() instanceof PublicKey pk) {
+                            keyCache.put(jwk.getId(), pk);
+                        }
                     }
+                    log.info("JWKS cargado exitosamente desde {}", uri);
+                    return;
                 }
-                log.info("JWKS cargado exitosamente desde {}", jwkSetUri);
+            } catch (Exception e) {
+                log.debug("No fue posible consultar endpoint JWKS en {}: {}", uri, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("No fue posible consultar endpoint JWKS en {}: {}", jwkSetUri, e.getMessage());
         }
     }
 
