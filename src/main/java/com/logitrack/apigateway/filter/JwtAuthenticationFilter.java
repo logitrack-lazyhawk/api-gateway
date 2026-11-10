@@ -22,6 +22,7 @@ import java.util.Set;
 
 /**
  * Filtro global reactivo para validación centralizada de tokens JWT y control de acceso RBAC.
+ * Soporta tokens Keycloak (RS256) y tradicionales (HS256) con inyección de cabeceras de contexto downstream.
  */
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
@@ -60,23 +61,26 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion no proporcionado");
         }
 
-        String token = authHeader.substring(7);
+        String token = authHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion vacio");
+        }
 
         // 3. Validar firma y expiración del JWT
         if (!jwtUtil.isTokenValid(token)) {
             return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion invalido o expirado");
         }
 
-        // 4. Extraer roles y validar permisos de acceso por ruta (RBAC)
+        // 4. Extraer roles y validar permisos de acceso por ruta y método (RBAC)
         List<String> roles = jwtUtil.extractRoles(token);
-        if (!isAuthorized(path, request.getMethod(),roles)) {
+        if (!isAuthorized(path, request.getMethod(), roles)) {
             return onError(exchange, HttpStatus.FORBIDDEN, "Acceso denegado: permisos insuficientes para el recurso solicitado");
         }
 
         // 5. Propagar identidad y roles en cabeceras downstream
         String username = jwtUtil.extractUsername(token);
         ServerHttpRequest mutatedRequest = request.mutate()
-                .header("X-Auth-User", username)
+                .header("X-Auth-User", username != null ? username : "")
                 .header("X-Auth-Roles", String.join(",", roles))
                 .build();
 
@@ -87,7 +91,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return PUBLIC_PREFIXES.stream().anyMatch(path::startsWith);
     }
 
-
     private boolean isAuthorized(
             String path,
             HttpMethod method,
@@ -96,44 +99,46 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         boolean isAdmin = hasRole(roles, "ADMIN");
         boolean isRepartidor = hasRole(roles, "REPARTIDOR");
         boolean isCliente = hasRole(roles, "CLIENTE");
+        boolean isVendedor = hasRole(roles, "VENDEDOR");
 
         // El administrador tiene acceso a todas las rutas
         if (isAdmin) {
             return true;
         }
 
-        // Rutas de repartidores
+        // Rutas de repartidores: solo ADMIN y REPARTIDOR
         if (path.startsWith("/api/v1/repartidores")) {
             return isRepartidor;
         }
 
-        // Rutas de clientes
+        // Rutas de clientes: solo ADMIN y CLIENTE
         if (path.startsWith("/api/v1/clientes")) {
             return isCliente;
         }
 
         // Rutas de envíos
         if (path.startsWith("/api/v1/envios")) {
-
-            // CLIENTE: únicamente consulta sus envíos
+            // CLIENTE: únicamente consulta sus propios envíos mediante GET
             if (isCliente) {
                 return HttpMethod.GET.equals(method)
                         && (
                         path.equals("/api/v1/envios/mis-envios")
                                 ||
-                                path.startsWith(
-                                        "/api/v1/envios/mis-envios/tracking/"
-                                )
+                                path.startsWith("/api/v1/envios/mis-envios/tracking/")
                 );
             }
 
-            // REPARTIDOR: conserva permisos actuales
-            return isRepartidor;
+            // REPARTIDOR y VENDEDOR conservan permisos sobre envíos
+            return isRepartidor || isVendedor;
+        }
+
+        // Rutas de productos o catálogo e-commerce: VENDEDOR y ADMIN
+        if (path.startsWith("/api/v1/productos") || path.startsWith("/api/v1/commerce")) {
+            return isVendedor;
         }
 
         return false;
     }
-
 
     private boolean hasRole(List<String> roles, String targetRole) {
         return roles.stream().anyMatch(r ->
