@@ -119,14 +119,25 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         // Rutas de envíos
         if (path.startsWith("/api/v1/envios")) {
             // CLIENTE: únicamente consulta sus propios envíos mediante GET
+
             if (isCliente) {
-                return HttpMethod.GET.equals(method)
-                        && (
-                        path.equals("/api/v1/envios/mis-envios")
-                                ||
-                                path.startsWith("/api/v1/envios/mis-envios/tracking/")
-                );
+
+                boolean consultarMisEnvios =
+                        HttpMethod.GET.equals(method)
+                                && (
+                                path.equals("/api/v1/envios/mis-envios")
+                                        || path.startsWith(
+                                        "/api/v1/envios/mis-envios/tracking/"
+                                )
+                        );
+
+                boolean crearMiEnvio =
+                        HttpMethod.POST.equals(method)
+                                && path.equals("/api/v1/envios/mis-envios");
+
+                return consultarMisEnvios || crearMiEnvio;
             }
+
 
             // REPARTIDOR y VENDEDOR conservan permisos sobre envíos
             return isRepartidor || isVendedor;
