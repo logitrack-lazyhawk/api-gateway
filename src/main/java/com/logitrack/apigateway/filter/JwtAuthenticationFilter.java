@@ -71,9 +71,9 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion invalido o expirado");
         }
 
-        // 4. Extraer roles y validar permisos de acceso por ruta (RBAC)
+        // 4. Extraer roles y validar permisos de acceso por ruta y método (RBAC)
         List<String> roles = jwtUtil.extractRoles(token);
-        if (!isAuthorized(path, roles)) {
+        if (!isAuthorized(path, request.getMethod(), roles)) {
             return onError(exchange, HttpStatus.FORBIDDEN, "Acceso denegado: permisos insuficientes para el recurso solicitado");
         }
 
@@ -91,13 +91,17 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return PUBLIC_PREFIXES.stream().anyMatch(path::startsWith);
     }
 
-    private boolean isAuthorized(String path, List<String> roles) {
+    private boolean isAuthorized(
+            String path,
+            HttpMethod method,
+            List<String> roles
+    ) {
         boolean isAdmin = hasRole(roles, "ADMIN");
         boolean isRepartidor = hasRole(roles, "REPARTIDOR");
         boolean isCliente = hasRole(roles, "CLIENTE");
         boolean isVendedor = hasRole(roles, "VENDEDOR");
 
-        // Administrador tiene acceso total a todas las rutas
+        // El administrador tiene acceso a todas las rutas
         if (isAdmin) {
             return true;
         }
@@ -112,9 +116,20 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return isCliente;
         }
 
-        // Rutas de envíos: CLIENTE, REPARTIDOR y VENDEDOR
+        // Rutas de envíos
         if (path.startsWith("/api/v1/envios")) {
-            return isCliente || isRepartidor || isVendedor;
+            // CLIENTE: únicamente consulta sus propios envíos mediante GET
+            if (isCliente) {
+                return HttpMethod.GET.equals(method)
+                        && (
+                        path.equals("/api/v1/envios/mis-envios")
+                                ||
+                                path.startsWith("/api/v1/envios/mis-envios/tracking/")
+                );
+            }
+
+            // REPARTIDOR y VENDEDOR conservan permisos sobre envíos
+            return isRepartidor || isVendedor;
         }
 
         // Rutas de productos o catálogo e-commerce: VENDEDOR y ADMIN

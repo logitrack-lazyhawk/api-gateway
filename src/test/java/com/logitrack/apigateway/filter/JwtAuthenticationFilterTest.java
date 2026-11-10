@@ -110,6 +110,65 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void testClienteConsultandoMisEnviosSucceeds() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/v1/envios/mis-envios")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+        when(jwtUtil.extractUsername("valid-token")).thenReturn("cliente@logitrack.com");
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain).filter(argThat(ex -> {
+            HttpHeaders headers = ex.getRequest().getHeaders();
+            return "cliente@logitrack.com".equals(headers.getFirst("X-Auth-User")) &&
+                    "CLIENTE".equals(headers.getFirst("X-Auth-Roles"));
+        }));
+    }
+
+    @Test
+    void testClienteConsultandoTrackingSucceeds() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/v1/envios/mis-envios/tracking/ENV-12345")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+        when(jwtUtil.extractUsername("valid-token")).thenReturn("cliente@logitrack.com");
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain).filter(argThat(ex -> {
+            HttpHeaders headers = ex.getRequest().getHeaders();
+            return "cliente@logitrack.com".equals(headers.getFirst("X-Auth-User")) &&
+                    "CLIENTE".equals(headers.getFirst("X-Auth-Roles"));
+        }));
+    }
+
+    @Test
+    void testClienteIntentandoCrearEnvioDirectoReturns403() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/api/v1/envios")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+
+        filter.filter(exchange, chain).block();
+
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+        verifyNoInteractions(chain);
+    }
+
+    @Test
     void testVendedorAccessingProductsSucceedsAndInjectsHeaders() {
         MockServerHttpRequest request = MockServerHttpRequest
                 .post("/api/v1/productos")
