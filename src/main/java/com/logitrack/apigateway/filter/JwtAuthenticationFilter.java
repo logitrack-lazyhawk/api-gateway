@@ -32,7 +32,9 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     // Rutas públicas que no requieren token JWT
     private static final Set<String> PUBLIC_PREFIXES = Set.of(
             "/api/auth/",
-            "/actuator"
+            "/actuator",
+            "/realms/",
+            "/resources/"
     );
 
     public JwtAuthenticationFilter(JwtUtil jwtUtil) {
