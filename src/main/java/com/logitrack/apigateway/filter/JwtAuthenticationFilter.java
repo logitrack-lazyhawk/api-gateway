@@ -22,6 +22,7 @@ import java.util.Set;
 
 /**
  * Filtro global reactivo para validación centralizada de tokens JWT y control de acceso RBAC.
+ * Soporta tokens Keycloak (RS256) y tradicionales (HS256) con inyección de cabeceras de contexto downstream.
  */
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
@@ -60,7 +61,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion no proporcionado");
         }
 
-        String token = authHeader.substring(7);
+        String token = authHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            return onError(exchange, HttpStatus.UNAUTHORIZED, "Token de autenticacion vacio");
+        }
 
         // 3. Validar firma y expiración del JWT
         if (!jwtUtil.isTokenValid(token)) {
@@ -76,7 +80,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         // 5. Propagar identidad y roles en cabeceras downstream
         String username = jwtUtil.extractUsername(token);
         ServerHttpRequest mutatedRequest = request.mutate()
-                .header("X-Auth-User", username)
+                .header("X-Auth-User", username != null ? username : "")
                 .header("X-Auth-Roles", String.join(",", roles))
                 .build();
 
@@ -91,6 +95,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         boolean isAdmin = hasRole(roles, "ADMIN");
         boolean isRepartidor = hasRole(roles, "REPARTIDOR");
         boolean isCliente = hasRole(roles, "CLIENTE");
+        boolean isVendedor = hasRole(roles, "VENDEDOR");
 
         // Administrador tiene acceso total a todas las rutas
         if (isAdmin) {
@@ -107,9 +112,14 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return isCliente;
         }
 
-        // Rutas de envíos: CLIENTE y REPARTIDOR
+        // Rutas de envíos: CLIENTE, REPARTIDOR y VENDEDOR
         if (path.startsWith("/api/v1/envios")) {
-            return isCliente || isRepartidor;
+            return isCliente || isRepartidor || isVendedor;
+        }
+
+        // Rutas de productos o catálogo e-commerce: VENDEDOR y ADMIN
+        if (path.startsWith("/api/v1/productos") || path.startsWith("/api/v1/commerce")) {
+            return isVendedor;
         }
 
         return false;
