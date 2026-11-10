@@ -69,7 +69,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         // 4. Extraer roles y validar permisos de acceso por ruta (RBAC)
         List<String> roles = jwtUtil.extractRoles(token);
-        if (!isAuthorized(path, roles)) {
+        if (!isAuthorized(path, request.getMethod(),roles)) {
             return onError(exchange, HttpStatus.FORBIDDEN, "Acceso denegado: permisos insuficientes para el recurso solicitado");
         }
 
@@ -87,33 +87,53 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return PUBLIC_PREFIXES.stream().anyMatch(path::startsWith);
     }
 
-    private boolean isAuthorized(String path, List<String> roles) {
+
+    private boolean isAuthorized(
+            String path,
+            HttpMethod method,
+            List<String> roles
+    ) {
         boolean isAdmin = hasRole(roles, "ADMIN");
         boolean isRepartidor = hasRole(roles, "REPARTIDOR");
         boolean isCliente = hasRole(roles, "CLIENTE");
 
-        // Administrador tiene acceso total a todas las rutas
+        // El administrador tiene acceso a todas las rutas
         if (isAdmin) {
             return true;
         }
 
-        // Rutas de repartidores: solo ADMIN y REPARTIDOR
+        // Rutas de repartidores
         if (path.startsWith("/api/v1/repartidores")) {
             return isRepartidor;
         }
 
-        // Rutas de clientes: solo ADMIN y CLIENTE
+        // Rutas de clientes
         if (path.startsWith("/api/v1/clientes")) {
             return isCliente;
         }
 
-        // Rutas de envíos: CLIENTE y REPARTIDOR
+        // Rutas de envíos
         if (path.startsWith("/api/v1/envios")) {
-            return isCliente || isRepartidor;
+
+            // CLIENTE: únicamente consulta sus envíos
+            if (isCliente) {
+                return HttpMethod.GET.equals(method)
+                        && (
+                        path.equals("/api/v1/envios/mis-envios")
+                                ||
+                                path.startsWith(
+                                        "/api/v1/envios/mis-envios/tracking/"
+                                )
+                );
+            }
+
+            // REPARTIDOR: conserva permisos actuales
+            return isRepartidor;
         }
 
         return false;
     }
+
 
     private boolean hasRole(List<String> roles, String targetRole) {
         return roles.stream().anyMatch(r ->
