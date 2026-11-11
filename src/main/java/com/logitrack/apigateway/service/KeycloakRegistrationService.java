@@ -83,6 +83,41 @@ public class KeycloakRegistrationService {
         if (!userNode.has("emailVerified")) {
             userNode.put("emailVerified", true);
         }
+        // Limpiar acciones requeridas pendientes para permitir login inmediato
+        if (!userNode.has("requiredActions")) {
+            userNode.putArray("requiredActions");
+        }
+
+        // Asegurar firstName y lastName (requeridos por el User Profile de Keycloak)
+        String firstName = userNode.hasNonNull("firstName") ? userNode.get("firstName").asText().trim() : "";
+        if (firstName.isBlank() && userNode.hasNonNull("nombre")) {
+            firstName = userNode.get("nombre").asText().trim();
+            userNode.put("firstName", firstName);
+        }
+        if (firstName.isBlank()) {
+            firstName = username.contains("@") ? username.substring(0, username.indexOf('@')) : username;
+            userNode.put("firstName", firstName);
+        }
+
+        String lastName = userNode.hasNonNull("lastName") ? userNode.get("lastName").asText().trim() : "";
+        if (lastName.isBlank()) {
+            if (firstName.contains(" ")) {
+                int spaceIdx = firstName.indexOf(' ');
+                lastName = firstName.substring(spaceIdx + 1).trim();
+                firstName = firstName.substring(0, spaceIdx).trim();
+                userNode.put("firstName", firstName);
+                userNode.put("lastName", lastName.isBlank() ? "Cliente" : lastName);
+            } else {
+                userNode.put("lastName", "Cliente");
+            }
+        }
+
+        // Remover campos auxiliares del frontend no soportados por UserRepresentation de Keycloak
+        userNode.remove("nombre");
+        userNode.remove("dni");
+        userNode.remove("telefono");
+        userNode.remove("confirmPassword");
+        userNode.remove("repassword");
 
         // Normalizar credenciales si vienen presentes
         if (userNode.has("credentials") && userNode.get("credentials").isArray()) {
