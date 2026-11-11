@@ -145,9 +145,19 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return isRepartidor || isVendedor;
         }
 
-        // Rutas de productos o catálogo e-commerce: VENDEDOR y ADMIN
+        // Rutas de productos o catálogo e-commerce:
+        // - Consulta de productos (GET): CLIENTE, VENDEDOR y ADMIN
+        // - Gestión de catálogo (POST, PUT, DELETE, PATCH): VENDEDOR y ADMIN
         if (path.startsWith("/api/v1/productos") || path.startsWith("/api/v1/commerce")) {
+            if (HttpMethod.GET.equals(method)) {
+                return isCliente || isVendedor;
+            }
             return isVendedor;
+        }
+
+        // Rutas de carrito de compras, órdenes y checkout e-commerce: CLIENTE y ADMIN
+        if (path.startsWith("/api/v1/carritos") || path.startsWith("/api/v1/ordenes") || path.startsWith("/api/v1/pagos")) {
+            return isCliente;
         }
 
         return false;

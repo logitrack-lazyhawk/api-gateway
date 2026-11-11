@@ -209,4 +209,63 @@ class JwtAuthenticationFilterTest {
                     "ROLE_ADMIN".equals(headers.getFirst("X-Auth-Roles"));
         }));
     }
+
+    @Test
+    void testClienteAccessingProductsCatalogViaGetSucceeds() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/v1/productos")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+        when(jwtUtil.extractUsername("valid-token")).thenReturn("cliente@logitrack.com");
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain).filter(argThat(ex -> {
+            HttpHeaders headers = ex.getRequest().getHeaders();
+            return "cliente@logitrack.com".equals(headers.getFirst("X-Auth-User")) &&
+                    "CLIENTE".equals(headers.getFirst("X-Auth-Roles"));
+        }));
+    }
+
+    @Test
+    void testClienteTryingToModifyProductsReturns403() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/api/v1/productos")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+
+        filter.filter(exchange, chain).block();
+
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void testClienteAccessingCarritoSucceeds() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/v1/carritos/usr-123")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        when(jwtUtil.isTokenValid("valid-token")).thenReturn(true);
+        when(jwtUtil.extractRoles("valid-token")).thenReturn(List.of("CLIENTE"));
+        when(jwtUtil.extractUsername("valid-token")).thenReturn("cliente@logitrack.com");
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain).filter(argThat(ex -> {
+            HttpHeaders headers = ex.getRequest().getHeaders();
+            return "cliente@logitrack.com".equals(headers.getFirst("X-Auth-User")) &&
+                    "CLIENTE".equals(headers.getFirst("X-Auth-Roles"));
+        }));
+    }
 }
