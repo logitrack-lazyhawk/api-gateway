@@ -45,6 +45,14 @@ public class KeycloakRegistrationService {
     @Value("${KEYCLOAK_ADMIN_PASSWORD:${keycloak.admin.password:admin}}")
     private String adminPassword;
 
+    public ResponseEntity<Map<String, Object>> registrarUsuario(Map<String, Object> payloadMap) {
+        if (payloadMap == null || payloadMap.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El cuerpo de la petición debe ser un objeto JSON"));
+        }
+        JsonNode payload = objectMapper.valueToTree(payloadMap);
+        return registrarUsuario(payload);
+    }
+
     public ResponseEntity<Map<String, Object>> registrarUsuario(JsonNode payload) {
         if (payload == null || !payload.isObject()) {
             return ResponseEntity.badRequest().body(Map.of("error", "El cuerpo de la petición debe ser un objeto JSON"));
@@ -133,23 +141,23 @@ public class KeycloakRegistrationService {
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() == 201) {
-                    // Extraer ID del usuario creado desde cabecera Location
+                    // Extraer ID del usuario creado desde cabecera Location o por query
                     String userId = extraerUserId(response);
+                    if (userId == null || userId.isBlank()) {
+                        userId = buscarUserIdPorUsername(baseUrl, adminToken, username);
+                    }
 
-                    // Si se solicitó un rol específico (e.g. REPARTIDOR o VENDEDOR), asignarlo
-                    if (userId != null && rolOpcional != null && !rolOpcional.isBlank()) {
-                        asignarRol(baseUrl, adminToken, userId, rolOpcional);
+                    // Asignar rol: el solicitado o CLIENTE por defecto
+                    String rolParaAsignar = (rolOpcional != null && !rolOpcional.isBlank()) ? rolOpcional : "CLIENTE";
+                    if (userId != null) {
+                        asignarRol(baseUrl, adminToken, userId, rolParaAsignar);
                     }
 
                     Map<String, Object> respBody = new LinkedHashMap<>();
                     respBody.put("mensaje", "Usuario registrado exitosamente en Keycloak");
                     respBody.put("username", username);
                     respBody.put("email", email);
-                    if (rolOpcional != null) {
-                        respBody.put("rol", rolOpcional);
-                    } else {
-                        respBody.put("rol", "CLIENTE");
-                    }
+                    respBody.put("rol", rolParaAsignar);
                     return ResponseEntity.status(HttpStatus.CREATED).body(respBody);
                 } else if (response.statusCode() == 409) {
                     return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -203,6 +211,28 @@ public class KeycloakRegistrationService {
             if (idx != -1 && idx < loc.length() - 1) {
                 return loc.substring(idx + 1);
             }
+        }
+        return null;
+    }
+
+    private String buscarUserIdPorUsername(String baseUrl, String adminToken, String username) {
+        try {
+            String queryUrl = baseUrl + "/admin/realms/" + realm + "/users?username=" + URLEncoder.encode(username, StandardCharsets.UTF_8);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(queryUrl))
+                    .header("Authorization", "Bearer " + adminToken)
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                JsonNode array = objectMapper.readTree(response.body());
+                if (array.isArray() && array.size() > 0) {
+                    return array.get(0).has("id") ? array.get(0).get("id").asText() : null;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Error buscando usuario por username: {}", e.getMessage());
         }
         return null;
     }

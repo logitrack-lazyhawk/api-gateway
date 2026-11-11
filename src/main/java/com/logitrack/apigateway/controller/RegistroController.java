@@ -1,6 +1,5 @@
 package com.logitrack.apigateway.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.logitrack.apigateway.service.KeycloakRegistrationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,7 +18,7 @@ public class RegistroController {
     }
 
     @PostMapping("/registro")
-    public Mono<ResponseEntity<Map<String, Object>>> registrar(@RequestBody JsonNode payload) {
+    public Mono<ResponseEntity<Map<String, Object>>> registrar(@RequestBody Map<String, Object> payload) {
         return Mono.fromCallable(() -> registrationService.registrarUsuario(payload));
     }
 }
